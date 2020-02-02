@@ -6,7 +6,7 @@
 #define IDD_DIALOG_ABOUT                102
 #define IDR_ACCELERATOR                 103
 #define IDC_SYSLINK                     104
-#define ID_CANVAS						110
+#define ID_CANVAS						111
 #define IDM_NEW                         40001
 #define IDA_NEW                         40001
 #define IDM_SAVE                        40002

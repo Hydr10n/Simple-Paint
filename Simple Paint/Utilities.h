@@ -8,6 +8,8 @@
 
 #pragma comment(lib, "Shlwapi.lib")
 
+#pragma warning(disable:6287)
+#pragma warning(disable:26495)
 #pragma warning(disable:28252)
 
 #pragma region Enable Win32 Visual Styles
@@ -24,8 +26,8 @@
 #pragma endregion
 
 #pragma region Support high DPI displays
-#define Scale(iPixels, iCurrentDPI) MulDiv(iPixels, iDPI, USER_DEFAULT_SCREEN_DPI)
-#define DPIAware_CreateWindowExW(iCurrentDPI, dwExStyle, lpClassName, lpWindowName, dwStyle, iX, iY, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam) CreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle, Scale(iX, iCurrentDPI), Scale(iY, iCurrentDP), Scale(nWidth, iCurrentDPI), Scale(nHeight, iCurrentDPI), hWndParent, hMenu, hInstance, lpParam)
+#define Scale(iPixels, iDPI) MulDiv(iPixels, iDPI, USER_DEFAULT_SCREEN_DPI)
+#define DPIAware_CreateWindowExW(iDPI, dwExStyle, lpClassName, lpWindowName, dwStyle, iX, iY, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam) CreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle, Scale(iX, iDPI), Scale(iY, iDPI), Scale(nWidth, iDPI), Scale(nHeight, iDPI), hWndParent, hMenu, hInstance, lpParam)
 #pragma endregion
 
 BOOL SaveDCAs24bitBitmapFile(LPCWSTR lpcwFileName, HDC hDC, UINT uWidth, UINT uHeight)
