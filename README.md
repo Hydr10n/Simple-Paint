@@ -6,7 +6,7 @@ This project uses only Windows API to implement basic painting.
 
 ## Features
 Simple Paint can do the following things currently:
-1. Paint/Erase/Pick color with mouse or by touching screen
+1. Paint/Erase/Fill/Pick color with mouse or by touching screen
 2. Select pen/eraser size
 3. Change canvas size
 4. Customize colors

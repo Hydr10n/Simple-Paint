@@ -1,6 +1,6 @@
 /*
 Project Name: Simple Paint
-Last Update: 2020/02/02
+Last Update: 2020/02/04
 
 This project is hosted on https://github.com/Hydr10n/Simple-Paint
 Copyright (C) Programmer-Yang_Xun@outlook.com. All Rights Reserved.
@@ -13,6 +13,7 @@ Copyright (C) Programmer-Yang_Xun@outlook.com. All Rights Reserved.
 #include <stack>
 #include <string>
 #include "resource.h"
+#include "About.h"
 #include "Utilities.h"
 
 #define APP_NAME L"Simple Paint"
@@ -37,7 +38,6 @@ Copyright (C) Programmer-Yang_Xun@outlook.com. All Rights Reserved.
 #define ERASER_WIDTH_2PX PEN_WIDTH_2PX
 #define ERASER_WIDTH_4PX PEN_WIDTH_4PX
 #define ERASER_WIDTH_8PX PEN_WIDTH_8PX
-#define SYS_WHITE_BRUSH (HBRUSH)(COLOR_WINDOW + 1)
 
 using std::auto_ptr;
 using std::vector;
@@ -55,7 +55,7 @@ struct PartialBitmap {
 	vector<PIXEL> Pixels;
 };
 
-enum class PaintingTools { Pen = IDM_PEN, Eraser = IDM_ERASER, ColorPicker = IDM_COLORPICKER };
+enum class PaintingTools { Pen = IDM_PEN, Eraser = IDM_ERASER, Fill = IDM_FILL, ColorPicker = IDM_COLORPICKER };
 
 BOOL bFileSaved = TRUE;
 int iDPI = USER_DEFAULT_SCREEN_DPI, iPenWidth = PEN_WIDTH_8PX, iEraserWidth = ERASER_WIDTH_8PX, iActualMargin;
@@ -65,13 +65,11 @@ SIZE currentScroll, maxBitmapSize, canvasSize;
 HWND hWnd_StatusBar;
 HMENU hMenu;
 HDC hDC_Canvas, hDC_Memory;
-HPEN hPen_Paint, hPen_Erase;
 stack<PartialBitmap> undoHistory, redoHistory;
 
 LRESULT CALLBACK WndProc_Main(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK WndProc_PaintView(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-INT_PTR CALLBACK DlgProc_About(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 int APIENTRY wWinMain(HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nShowCmd) {
 	UNREFERENCED_PARAMETER(hPrevInstance);
@@ -173,7 +171,7 @@ LRESULT CALLBACK WndProc_Main(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 				EnableMenuItem(hMenu, IDM_UNDO, MF_DISABLED);
 				EnableMenuItem(hMenu, IDM_REDO, MF_DISABLED);
 			}
-		} break;
+		}	break;
 		case IDA_SAVE: {
 			if (!bFileEverSaved)
 				goto saveAs;
@@ -209,43 +207,22 @@ LRESULT CALLBACK WndProc_Main(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 				return 1;
 		}	break;
 		case IDM_EXIT: PostMessage(hWnd, WM_CLOSE, 0, 0); break;
-		case IDM_PEN: case IDM_ERASER: case IDM_COLORPICKER: {
+		case IDM_PEN: case IDM_ERASER: case IDM_FILL: case IDM_COLORPICKER: {
 			CheckMenuRadioItem(hMenu, IDM_PEN, IDM_COLORPICKER, wParamLow, MF_BYCOMMAND);
 			paintingTool = (PaintingTools)wParamLow;
-			switch (wParamLow) {
-			case IDM_PEN: case IDM_ERASER: {
+			if (wParamLow != IDM_COLORPICKER)
 				previousPaintingTool = paintingTool;
-				SelectPen(hDC_Canvas, wParamLow == IDM_PEN ? hPen_Paint : hPen_Erase);
-				SelectPen(hDC_Memory, wParamLow == IDM_PEN ? hPen_Paint : hPen_Erase);
-			}	break;
-			}
-		} break;
+		}	break;
 		case IDM_PENSIZE_1PX: iPenWidth = PEN_WIDTH_1PX; goto pensize_8px;
 		case IDM_PENSIZE_2PX: iPenWidth = PEN_WIDTH_2PX; goto pensize_8px;
 		case IDM_PENSIZE_4PX: iPenWidth = PEN_WIDTH_4PX; goto pensize_8px;
-		case IDM_PENSIZE_8PX: iPenWidth = PEN_WIDTH_8PX; {
-		pensize_8px:;
-			CheckMenuRadioItem(hMenu, IDM_PENSIZE_1PX, IDM_PENSIZE_8PX, wParamLow, MF_BYCOMMAND);
-			DeletePen(hPen_Paint);
-			hPen_Paint = CreatePen(PS_SOLID, iPenWidth, penColor);
-			if (paintingTool == PaintingTools::Pen) {
-				SelectPen(hDC_Canvas, hPen_Paint);
-				SelectPen(hDC_Memory, hPen_Paint);
-			}
-		}	break;
+		case IDM_PENSIZE_8PX: iPenWidth = PEN_WIDTH_8PX;
+		pensize_8px:; CheckMenuRadioItem(hMenu, IDM_PENSIZE_1PX, IDM_PENSIZE_8PX, wParamLow, MF_BYCOMMAND); break;
 		case IDM_ERASERSIZE_1PX: iEraserWidth = ERASER_WIDTH_1PX; goto erasersize_8px;
 		case IDM_ERASERSIZE_2PX: iEraserWidth = ERASER_WIDTH_2PX; goto erasersize_8px;
 		case IDM_ERASERSIZE_4PX: iEraserWidth = ERASER_WIDTH_4PX; goto erasersize_8px;
-		case IDM_ERASERSIZE_8PX: iEraserWidth = ERASER_WIDTH_8PX; {
-		erasersize_8px:;
-			CheckMenuRadioItem(hMenu, IDM_ERASERSIZE_1PX, IDM_ERASERSIZE_8PX, wParamLow, MF_BYCOMMAND);
-			DeletePen(hPen_Erase);
-			hPen_Erase = CreatePen(PS_SOLID, iEraserWidth, 0xffffff);
-			if (paintingTool == PaintingTools::Eraser) {
-				SelectPen(hDC_Canvas, hPen_Erase);
-				SelectPen(hDC_Memory, hPen_Erase);
-			}
-		} break;
+		case IDM_ERASERSIZE_8PX: iEraserWidth = ERASER_WIDTH_8PX;
+		erasersize_8px:; CheckMenuRadioItem(hMenu, IDM_ERASERSIZE_1PX, IDM_ERASERSIZE_8PX, wParamLow, MF_BYCOMMAND); break;
 		case IDM_COLOR: {
 			static COLORREF custColors[16] = { penColor };
 			CHOOSECOLORW chooseColor = { sizeof(chooseColor) };
@@ -253,15 +230,8 @@ LRESULT CALLBACK WndProc_Main(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 			chooseColor.lpCustColors = custColors;
 			chooseColor.rgbResult = penColor;
 			chooseColor.Flags = CC_FULLOPEN | CC_RGBINIT;
-			if (ChooseColorW(&chooseColor)) {
-				DeletePen(hPen_Paint);
+			if (ChooseColorW(&chooseColor))
 				penColor = chooseColor.rgbResult;
-				hPen_Paint = CreatePen(PS_SOLID, iPenWidth, penColor);
-				if (paintingTool == PaintingTools::Pen) {
-					SelectPen(hDC_Canvas, hPen_Paint);
-					SelectPen(hDC_Memory, hPen_Paint);
-				}
-			}
 		}	break;
 		case IDM_ABOUT: DialogBoxW(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_DIALOG_ABOUT), hWnd, DlgProc_About); break;
 		default: PostMessageW(GetDlgItem(hWnd_PaintView, ID_CANVAS), uMsg, wParam, lParam); break;
@@ -270,10 +240,10 @@ LRESULT CALLBACK WndProc_Main(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 	case WM_CLOSE: {
 		if (!bFileSaved)
 			switch (MessageBoxW(hWnd, (wstring(UNSAVE_FILE_PROMPT) + szFileName + L'?').c_str(), L"Confirm", MB_YESNOCANCEL)) {
-			case IDYES:
+			case IDYES: {
 				if (SendMessageW(hWnd, WM_COMMAND, IDA_SAVE, 0))
 					return 0;
-				break;
+			}	break;
 			case IDCANCEL: return 0;
 			}
 	}	break;
@@ -376,7 +346,8 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 	static DWORD dwScanLineSize, dwDIBSectionSize;
 	static PBYTE pDIBSection;
 	static auto_ptr<BYTE> PreviousDIBSection;
-	static HBITMAP hBitmap, hBitmap_Old;
+	static HPEN hPen_Old;
+	static HBITMAP hBitmap_Old;
 	static COORD mouseCoord;
 	static RECT canvasRect;
 	static PartialBitmap partialBitmap;
@@ -393,7 +364,7 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		dwDIBSectionSize = maxBitmapSize.cy * dwScanLineSize;
 		hDC_Canvas = GetDC(hWnd);
 		hDC_Memory = CreateCompatibleDC(NULL);
-		hBitmap = CreateDIBSection(NULL, &bitmapInfo, DIB_RGB_COLORS, (LPVOID*)&pDIBSection, NULL, 0);
+		HBITMAP hBitmap = CreateDIBSection(NULL, &bitmapInfo, DIB_RGB_COLORS, (LPVOID*)&pDIBSection, NULL, 0);
 		if (hBitmap == NULL) {
 			DWORD dwLastError = GetLastError();
 			MessageBoxW(hWnd, SysErrorMsg(dwLastError).GetMsg(), NULL, MB_OK | MB_ICONERROR);
@@ -402,10 +373,6 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		}
 		FillMemory(pDIBSection, dwDIBSectionSize, 0xff);
 		hBitmap_Old = (HBITMAP)SelectBitmap(hDC_Memory, hBitmap);
-		hPen_Paint = CreatePen(PS_SOLID, iPenWidth, penColor);
-		hPen_Erase = CreatePen(PS_SOLID, iEraserWidth, 0xffffff);
-		SelectPen(hDC_Canvas, hPen_Paint);
-		SelectPen(hDC_Memory, hPen_Paint);
 	}	break;
 	case WM_NCCALCSIZE: {
 		if (wParam) {
@@ -421,7 +388,7 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		if (GET_Y_LPARAM(lParam) >= rect.bottom - iActualMargin &&
 			GET_X_LPARAM(lParam) >= rect.right - iActualMargin)
 			return HTBOTTOMRIGHT;
-	} break;
+	}	break;
 	case WM_GETMINMAXINFO: {
 		LPMINMAXINFO lpMinMaxInfo = (LPMINMAXINFO)lParam;
 		lpMinMaxInfo->ptMinTrackSize = { 1 + iActualMargin, 1 + iActualMargin };
@@ -457,7 +424,7 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		DeleteRgn(hRgn);
 		DeleteRgn(hRgn2);
 		SendMessageW(hWnd_StatusBar, SB_SETTEXT, 1, (LPARAM)(L"Canvas Size: " + to_wstring(canvasSize.cx) + L" \xd7 " + to_wstring(canvasSize.cy) + L" px").c_str());
-	} break;
+	}	break;
 	case WM_EXITSIZEMOVE: {
 		SetWindowLongPtrW(GetParent(hWnd), GWL_STYLE, lParentWindowStyle);
 		if (canvasSize.cx != partialBitmap.Size.cx || canvasSize.cy != partialBitmap.Size.cy) {
@@ -482,10 +449,8 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 									partialBitmap.Pixels.push_back({ i, rgbq });
 							}
 					RECT rect = { canvasSize.cx, 0, partialBitmap.Size.cx, partialBitmap.Size.cy };
-					FillRect(hDC_Canvas, &rect, SYS_WHITE_BRUSH);
 					FillRect(hDC_Memory, &rect, SYS_WHITE_BRUSH);
 					rect = { 0, canvasSize.cy, canvasSize.cx, partialBitmap.Size.cy };
-					FillRect(hDC_Canvas, &rect, SYS_WHITE_BRUSH);
 					FillRect(hDC_Memory, &rect, SYS_WHITE_BRUSH);
 				}
 				else if (canvasSize.cy < partialBitmap.Size.cy) {
@@ -497,7 +462,6 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 								partialBitmap.Pixels.push_back({ i, rgbq });
 						}
 					RECT rect = { 0, canvasSize.cy, partialBitmap.Size.cx, partialBitmap.Size.cy };
-					FillRect(hDC_Canvas, &rect, SYS_WHITE_BRUSH);
 					FillRect(hDC_Memory, &rect, SYS_WHITE_BRUSH);
 				}
 			}
@@ -512,51 +476,52 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 	case WM_LBUTTONDOWN: {
 		bLeftButtonDown = TRUE;
 		SetCapture(hWnd);
-		switch (paintingTool) {
-		case PaintingTools::Pen: case PaintingTools::Eraser: {
-			mouseCoord = { (SHORT)LOWORD(lParam), (SHORT)HIWORD(lParam) };
+		if (paintingTool != PaintingTools::ColorPicker) {
+			mouseCoord = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 			partialBitmap.Size = canvasSize;
 			partialBitmap.Pixels = decltype(partialBitmap.Pixels)();
 			PreviousDIBSection.reset(new BYTE[dwDIBSectionSize]);
 			CopyMemory(PreviousDIBSection.get(), pDIBSection, dwDIBSectionSize);
-			SetPixelV(hDC_Canvas, mouseCoord.X, mouseCoord.Y, paintingTool == PaintingTools::Pen ? penColor : 0xffffff);
-			SetPixelV(hDC_Memory, mouseCoord.X, mouseCoord.Y, paintingTool == PaintingTools::Pen ? penColor : 0xffffff);
-			MoveToEx(hDC_Canvas, mouseCoord.X, mouseCoord.Y, NULL);
-			MoveToEx(hDC_Memory, mouseCoord.X, mouseCoord.Y, NULL);
-			LineTo(hDC_Canvas, mouseCoord.X, mouseCoord.Y);
-			LineTo(hDC_Memory, mouseCoord.X, mouseCoord.Y);
-		} break;
+			switch (paintingTool) {
+			case PaintingTools::Pen: case PaintingTools::Eraser: {
+				hPen_Old = SelectPen(hDC_Canvas, CreatePen(PS_SOLID,
+					paintingTool == PaintingTools::Pen ? iPenWidth : iEraserWidth,
+					paintingTool == PaintingTools::Pen ? penColor : 0xffffff));
+				SetPixelV(hDC_Canvas, mouseCoord.X, mouseCoord.Y, paintingTool == PaintingTools::Pen ? penColor : 0xffffff);
+				MoveToEx(hDC_Canvas, mouseCoord.X, mouseCoord.Y, NULL);
+				LineTo(hDC_Canvas, mouseCoord.X, mouseCoord.Y);
+			}	break;
+			case PaintingTools::Fill: {
+				HBRUSH hBrush_Old = SelectBrush(hDC_Canvas, CreateSolidBrush(penColor));
+				COLORREF color = GetPixel(hDC_Canvas, mouseCoord.X, mouseCoord.Y);
+				ExtFloodFill(hDC_Canvas, mouseCoord.X, mouseCoord.Y, color, FLOODFILLSURFACE);
+				DeleteBrush(SelectBrush(hDC_Canvas, hBrush_Old));
+			}	break;
+			}
 		}
 	}	break;
 	case WM_MOUSEMOVE: {
-		const COORD coord = { (SHORT)GET_X_LPARAM(lParam), (SHORT)GET_Y_LPARAM(lParam) };
+		const COORD coord = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 		SendMessageW(hWnd_StatusBar, SB_SETTEXT, 0, (LPARAM)(coord.X >= 0 && coord.X < canvasSize.cx && coord.Y >= 0 && coord.Y < canvasSize.cy ? (L"Mouse Coordinate: " + to_wstring(coord.X + 1) + L" \xd7 " + to_wstring(coord.Y + 1) + L" px").c_str() : NULL));
 		TRACKMOUSEEVENT trackMouseEvent = { sizeof(trackMouseEvent), TME_LEAVE, hWnd };
 		TrackMouseEvent(&trackMouseEvent);
 		if (bLeftButtonDown) {
 			mouseCoord = coord;
 			switch (paintingTool) {
-			case PaintingTools::Pen: case PaintingTools::Eraser: {
-				LineTo(hDC_Canvas, mouseCoord.X, mouseCoord.Y);
-				LineTo(hDC_Memory, mouseCoord.X, mouseCoord.Y);
-			}	break;
+			case PaintingTools::Pen: case PaintingTools::Eraser: LineTo(hDC_Canvas, mouseCoord.X, mouseCoord.Y); break;
 			}
 		}
 	}	break;
 	case WM_MOUSELEAVE: SendMessageW(hWnd_StatusBar, SB_SETTEXT, 0, 0); break;
-	case WM_LBUTTONUP: {
+	case WM_LBUTTONUP: ReleaseCapture(); break;
+	case WM_CAPTURECHANGED: {
 		if (bLeftButtonDown) {
 			bLeftButtonDown = FALSE;
-			ReleaseCapture();
 			switch (paintingTool) {
-			case PaintingTools::Pen: case PaintingTools::Eraser: {
+			case PaintingTools::Pen: case PaintingTools::Eraser: DeletePen(SelectPen(hDC_Canvas, hPen_Old)); // no "break;"
+			case PaintingTools::Fill: {
 				bFileSaved = FALSE;
-				RECT rect = { canvasSize.cx, 0, maxBitmapSize.cx, maxBitmapSize.cy };
-				FillRect(hDC_Canvas, &rect, SYS_WHITE_BRUSH);
-				FillRect(hDC_Memory, &rect, SYS_WHITE_BRUSH);
-				rect = { 0, canvasSize.cy, canvasSize.cx, maxBitmapSize.cy };
-				FillRect(hDC_Canvas, &rect, SYS_WHITE_BRUSH);
-				FillRect(hDC_Memory, &rect, SYS_WHITE_BRUSH);
+				BitBlt(hDC_Memory, 0, 0, canvasSize.cx, canvasSize.cy, hDC_Canvas, 0, 0, SRCCOPY);
 				LPCBYTE pPreviousDIBSection = PreviousDIBSection.get();
 				for (long x = 0; x < partialBitmap.Size.cx; x++)
 					for (long y = 0; y < partialBitmap.Size.cy; y++) {
@@ -574,14 +539,8 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 			}	break;
 			case PaintingTools::ColorPicker: {
 				penColor = GetPixel(hDC_Canvas, LOWORD(lParam), HIWORD(lParam));
-				DeletePen(hPen_Paint);
-				hPen_Paint = CreatePen(PS_SOLID, iPenWidth, penColor);
 				switch (previousPaintingTool) {
-				case PaintingTools::Pen: case PaintingTools::Eraser: {
-					paintingTool = previousPaintingTool;
-					SelectPen(hDC_Canvas, previousPaintingTool == PaintingTools::Pen ? hPen_Paint : hPen_Erase);
-					SelectPen(hDC_Memory, previousPaintingTool == PaintingTools::Eraser ? hPen_Paint : hPen_Erase);
-				}	break;
+				case PaintingTools::Pen: case PaintingTools::Eraser: paintingTool = previousPaintingTool; break;
 				}
 				CheckMenuRadioItem(hMenu, IDM_PEN, IDM_COLORPICKER, (UINT)paintingTool, MF_BYCOMMAND);
 			}	break;
@@ -636,24 +595,28 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 					EnableMenuItem(hMenu, IDM_REDO, MF_DISABLED);
 				BitBlt(hDC_Canvas, 0, 0, canvasSize.cx, canvasSize.cy, hDC_Memory, 0, 0, SRCCOPY);
 			}
-		} break;
+		}	break;
 		case IDA_CANCEL: {
 			if (bLeftButtonDown) {
 				bLeftButtonDown = FALSE;
 				ReleaseCapture();
-				CopyMemory(pDIBSection, PreviousDIBSection.get(), dwDIBSectionSize);
 				partialBitmap.Pixels = decltype(partialBitmap.Pixels)();
 				PreviousDIBSection.reset(nullptr);
 				BitBlt(hDC_Canvas, 0, 0, canvasSize.cx, canvasSize.cy, hDC_Memory, 0, 0, SRCCOPY);
+				switch (paintingTool) {
+				case PaintingTools::Pen: case PaintingTools::Eraser: DeletePen(SelectPen(hDC_Canvas, hPen_Old)); break;
+				}
 			}
 		}	break;
 		}
 	}	break;
 	case WM_NCPAINT: {
-		HRGN hRgn = (HRGN)wParam;
 		HDC hDC = GetWindowDC(hWnd);
 		RECT rect = { canvasSize.cx, canvasSize.cy, canvasSize.cx + iActualMargin, canvasSize.cy + iActualMargin };
-		FillRect(hDC, &rect, SYS_WHITE_BRUSH);
+		FillRect(hDC, &rect, (HBRUSH)COLOR_WINDOW);
+		HBRUSH hBrush = CreateSolidBrush(RGB(14, 151, 249));
+		FrameRect(hDC, &rect, hBrush);
+		DeleteBrush(hBrush);
 		ReleaseDC(hWnd, hDC);
 	}	break;
 	case WM_PAINT: {
@@ -661,35 +624,12 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		HDC hDC = BeginPaint(hWnd, &ps);
 		BitBlt(hDC_Canvas, 0, 0, canvasSize.cx, canvasSize.cy, hDC_Memory, 0, 0, SRCCOPY);
 		EndPaint(hWnd, &ps);
-	} break;
+	}	break;
 	case WM_DESTROY: {
-		ReleaseDC(hWnd, hDC_Canvas);
-		DeleteBitmap(hBitmap);
-		DeletePen(hPen_Paint);
-		DeletePen(hPen_Erase);
-		SelectBitmap(hDC_Memory, hBitmap_Old);
+		DeleteBitmap(SelectBitmap(hDC_Memory, hBitmap_Old));
 		DeleteDC(hDC_Memory);
-	} break;
-	}
-	return DefWindowProcW(hWnd, uMsg, wParam, lParam);
-}
-
-INT_PTR CALLBACK DlgProc_About(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-	switch (uMsg) {
-	case WM_INITDIALOG: return TRUE;
-	case WM_COMMAND:
-		switch (LOWORD(wParam)) {
-		case IDOK: case IDCANCEL: EndDialog(hDlg, LOWORD(wParam)); return TRUE;
-		}
-	case WM_NOTIFY: {
-		switch (((LPNMHDR)lParam)->code) {
-		case NM_CLICK: case NM_RETURN: {
-			const PNMLINK pNMLink = (PNMLINK)lParam;
-			if (((LPNMHDR)lParam)->hwndFrom == GetDlgItem(hDlg, IDC_SYSLINK))
-				ShellExecuteW(NULL, L"open", pNMLink->item.szUrl, NULL, NULL, SW_SHOW);
-		}	break;
-		}
+		ReleaseDC(hWnd, hDC_Canvas);
 	}	break;
 	}
-	return FALSE;
+	return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }

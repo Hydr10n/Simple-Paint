@@ -24,6 +24,9 @@
     <ClInclude Include="SysErrorMsg.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="About.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Simple Paint.rc">

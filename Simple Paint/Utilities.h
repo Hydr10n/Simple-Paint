@@ -25,6 +25,8 @@
 #endif
 #pragma endregion
 
+#define SYS_WHITE_BRUSH (HBRUSH)(COLOR_WINDOW + 1)
+
 #pragma region Support high DPI displays
 #define Scale(iPixels, iDPI) MulDiv(iPixels, iDPI, USER_DEFAULT_SCREEN_DPI)
 #define DPIAware_CreateWindowExW(iDPI, dwExStyle, lpClassName, lpWindowName, dwStyle, iX, iY, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam) CreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle, Scale(iX, iDPI), Scale(iY, iDPI), Scale(nWidth, iDPI), Scale(nHeight, iDPI), hWndParent, hMenu, hInstance, lpParam)
