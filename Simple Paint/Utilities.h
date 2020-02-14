@@ -8,6 +8,8 @@
 
 #pragma comment(lib, "Shlwapi.lib")
 
+#pragma comment(linker, "/SUBSYSTEM:WINDOWS")
+
 #pragma warning(disable:6287)
 #pragma warning(disable:26495)
 #pragma warning(disable:28252)
@@ -50,7 +52,7 @@ BOOL SaveDCAs24bitBitmapFile(LPCWSTR lpcwFileName, HDC hDC, UINT uWidth, UINT uH
 	HBITMAP hBitmap = CreateDIBSection(NULL, &bitmapInfo, DIB_RGB_COLORS, (LPVOID*)&pBits, NULL, 0);
 	if (hBitmap == NULL)
 		return FALSE;
-	HBITMAP hOldBitmap = (HBITMAP)SelectObject(hDC_Memory, hBitmap);
+	HBITMAP hBitmap_Old = SelectBitmap(hDC_Memory, hBitmap);
 	BitBlt(hDC_Memory, 0, 0, uWidth, uHeight, hDC, 0, 0, SRCCOPY);
 	BITMAPFILEHEADER bitmapFileHeader = { 0 };
 	bitmapFileHeader.bfType = 0x4d42;
@@ -62,12 +64,11 @@ BOOL SaveDCAs24bitBitmapFile(LPCWSTR lpcwFileName, HDC hDC, UINT uWidth, UINT uH
 	if (!WriteFile(hFile, pBits, dwDIBSectionSize, &dwBytesWritten, NULL))
 		dwLastError = GetLastError();
 	CloseHandle(hFile);
-	SelectObject(hDC_Memory, hOldBitmap);
-	DeleteObject(hBitmap);
+	DeleteBitmap(SelectBitmap(hDC_Memory, hBitmap_Old));
 	DeleteDC(hDC_Memory);
-	SetLastError(dwLastError);
 	if (dwLastError == ERROR_SUCCESS)
 		return TRUE;
 	DeleteFileW(lpcwFileName);
+	SetLastError(dwLastError);
 	return FALSE;
 }

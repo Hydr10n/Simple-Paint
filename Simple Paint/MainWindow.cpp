@@ -1,12 +1,10 @@
 /*
 Project Name: Simple Paint
-Last Update: 2020/02/04
+Last Update: 2020/02/14
 
 This project is hosted on https://github.com/Hydr10n/Simple-Paint
 Copyright (C) Programmer-Yang_Xun@outlook.com. All Rights Reserved.
 */
-
-#pragma comment(linker, "/SUBSYSTEM:WINDOWS")
 
 #include <memory>
 #include <vector>
@@ -18,7 +16,7 @@ Copyright (C) Programmer-Yang_Xun@outlook.com. All Rights Reserved.
 
 #define APP_NAME L"Simple Paint"
 #define WINDOW_TITLE_SUFFIX (L" - " APP_NAME)
-#define DEFAULT_FILE_NAME L"Untitled"
+#define DEFAULT_FILE_TITLE L"Untitled"
 #define UNSAVE_FILE_PROMPT L"Do you want to save changes to "
 #define SAVE_FILE_FAIL_PROMPT L"Failed to save changes due to the following reason:\n"
 
@@ -30,11 +28,13 @@ Copyright (C) Programmer-Yang_Xun@outlook.com. All Rights Reserved.
 #define CANVAS_TOP CANVAS_LEFT
 #define CANVAS_PADDING 3
 #define CANVAS_MARGIN 7
+#define CANVAS_SHADOW_OFFSET 5
+#define CANVAS_SHADOW_LENGTH 4
 #define PEN_WIDTH_1PX 1
 #define PEN_WIDTH_2PX 2
 #define PEN_WIDTH_4PX 4
 #define PEN_WIDTH_8PX 8
-#define	ERASER_WIDTH_1PX PEN_WIDTH_1PX
+#define ERASER_WIDTH_1PX PEN_WIDTH_1PX
 #define ERASER_WIDTH_2PX PEN_WIDTH_2PX
 #define ERASER_WIDTH_4PX PEN_WIDTH_4PX
 #define ERASER_WIDTH_8PX PEN_WIDTH_8PX
@@ -73,31 +73,34 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
 int APIENTRY wWinMain(HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nShowCmd) {
 	UNREFERENCED_PARAMETER(hPrevInstance);
-	int iWidth = MAIN_WINDOW_WIDTH, iHeight = MAIN_WINDOW_HEIGHT;
+	SIZE size = { MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT };
 	HDC hDC = GetDC(NULL);
 	if (hDC) {
 		SetProcessDPIAware();
 		iDPI = GetDeviceCaps(hDC, LOGPIXELSX);
-		iWidth = Scale(iWidth, iDPI);
-		iHeight = Scale(iHeight, iDPI);
+		size = { Scale(size.cx, iDPI), Scale(size.cy, iDPI) };
 		ReleaseDC(NULL, hDC);
 	}
 	WNDCLASSW wndClass = { 0 };
 	wndClass.hInstance = hInstance;
 	wndClass.lpfnWndProc = WndProc_Main;
 	wndClass.lpszClassName = L"SimplePaint";
-	wndClass.lpszMenuName = MAKEINTRESOURCE(IDR_MENU);
+	wndClass.lpszMenuName = MAKEINTRESOURCEW(IDR_MENU);
 	wndClass.hIcon = LoadIcon(NULL, IDI_APPLICATION);
 	wndClass.hCursor = LoadCursor(NULL, IDC_ARROW);
 	wndClass.hbrBackground = SYS_WHITE_BRUSH;
 	RegisterClassW(&wndClass);
-	HWND hWnd = CreateWindowW(wndClass.lpszClassName, (wstring(DEFAULT_FILE_NAME) + WINDOW_TITLE_SUFFIX).c_str(),
+	STARTUPINFO startupInfo;
+	GetStartupInfoW(&startupInfo);
+	HWND hWnd = CreateWindowW(wndClass.lpszClassName, (wstring(DEFAULT_FILE_TITLE) + WINDOW_TITLE_SUFFIX).c_str(),
 		WS_OVERLAPPEDWINDOW,
-		(GetSystemMetrics(SM_CXSCREEN) - iWidth) / 2, (GetSystemMetrics(SM_CYSCREEN) - iHeight) / 2, iWidth, iHeight,
+		startupInfo.dwFlags & STARTF_USEPOSITION ? startupInfo.dwX : (GetSystemMetrics(SM_CXSCREEN) - size.cx) / 2,
+		startupInfo.dwFlags & STARTF_USEPOSITION ? startupInfo.dwY : (GetSystemMetrics(SM_CYSCREEN) - size.cy) / 2,
+		size.cx, size.cy,
 		NULL, NULL, hInstance, NULL);
 	ShowWindow(hWnd, nShowCmd);
 	UpdateWindow(hWnd);
-	HACCEL hAccel = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDR_ACCELERATOR));
+	HACCEL hAccel = LoadAcceleratorsW(hInstance, MAKEINTRESOURCEW(IDR_ACCELERATOR));
 	MSG msg;
 	while (GetMessageW(&msg, NULL, 0, 0))
 		if (!TranslateAcceleratorW(hWnd, hAccel, &msg)) {
@@ -110,8 +113,8 @@ int APIENTRY wWinMain(HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, LPW
 
 LRESULT CALLBACK WndProc_Main(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	static BOOL bFileEverSaved;
-	static int iStatusBarHeight;
-	static WCHAR szFileName[MAX_PATH] = DEFAULT_FILE_NAME;
+	static LONG lStatusBarHeight;
+	static WCHAR szFileName[MAX_PATH] = DEFAULT_FILE_TITLE;
 	static HWND hWnd_PaintView;
 	static HBRUSH hBrush_Background;
 	switch (uMsg) {
@@ -125,7 +128,7 @@ LRESULT CALLBACK WndProc_Main(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 			hWnd, NULL, hInstance, NULL);
 		RECT statusBarRect;
 		GetWindowRect(hWnd_StatusBar, &statusBarRect);
-		iStatusBarHeight = statusBarRect.bottom - statusBarRect.top;
+		lStatusBarHeight = statusBarRect.bottom - statusBarRect.top;
 		SendMessageW(hWnd_StatusBar, SB_SETPARTS, _countof(uParts), (LPARAM)uParts);
 		WNDCLASSW wndClass = { 0 };
 		wndClass.hInstance = hInstance;
@@ -146,7 +149,7 @@ LRESULT CALLBACK WndProc_Main(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 	case WM_GETMINMAXINFO: ((LPMINMAXINFO)lParam)->ptMinTrackSize = { Scale(230, iDPI), Scale(230, iDPI) }; return 0;
 	case WM_SIZE: {
 		SetWindowPos(hWnd_StatusBar, NULL, 0, 0, 0, 0, SWP_NOZORDER);
-		SetWindowPos(hWnd_PaintView, NULL, 0, 0, LOWORD(lParam), HIWORD(lParam) - iStatusBarHeight, SWP_NOZORDER);
+		SetWindowPos(hWnd_PaintView, NULL, 0, 0, LOWORD(lParam), HIWORD(lParam) - lStatusBarHeight, SWP_NOZORDER);
 	}	break;
 	case WM_COMMAND: {
 		const WORD wParamLow = LOWORD(wParam);
@@ -172,6 +175,20 @@ LRESULT CALLBACK WndProc_Main(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 				EnableMenuItem(hMenu, IDM_REDO, MF_DISABLED);
 			}
 		}	break;
+		case IDA_NEWWINDOW: {
+			WCHAR szProgramFileName[MAX_PATH];
+			GetModuleFileNameW(NULL, szProgramFileName, _countof(szProgramFileName));
+			RECT rect;
+			GetWindowRect(hWnd, &rect);
+			STARTUPINFOW startupInfo = { sizeof(startupInfo) };
+			startupInfo.dwFlags = STARTF_USEPOSITION;
+			startupInfo.dwX = rect.left;
+			startupInfo.dwY = rect.top;
+			PROCESS_INFORMATION processInfo;
+			CreateProcessW(szProgramFileName, NULL, NULL, NULL, FALSE, 0, NULL, NULL, &startupInfo, &processInfo);
+			CloseHandle(processInfo.hProcess);
+			CloseHandle(processInfo.hThread);
+		}	break;
 		case IDA_SAVE: {
 			if (!bFileEverSaved)
 				goto saveAs;
@@ -184,7 +201,7 @@ LRESULT CALLBACK WndProc_Main(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 		}	break;
 		case IDA_SAVEAS: {
 		saveAs:;
-			WCHAR szFileTitle[MAX_PATH];
+			WCHAR szFileTitle[_countof(szFileName)];
 			OPENFILENAMEW openFileName = { sizeof(openFileName) };
 			openFileName.hwndOwner = hWnd;
 			openFileName.lpstrFile = szFileName;
@@ -238,7 +255,11 @@ LRESULT CALLBACK WndProc_Main(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 		}
 	}	break;
 	case WM_CLOSE: {
-		if (!bFileSaved)
+		if (!bFileSaved) {
+			if (GetForegroundWindow() != hWnd) {
+				FLASHWINFO FlashWindowInfo = { sizeof(FlashWindowInfo), hWnd, FLASHW_TRAY | FLASHW_TIMER, 3 };
+				FlashWindowEx(&FlashWindowInfo);
+			}
 			switch (MessageBoxW(hWnd, (wstring(UNSAVE_FILE_PROMPT) + szFileName + L'?').c_str(), L"Confirm", MB_YESNOCANCEL)) {
 			case IDYES: {
 				if (SendMessageW(hWnd, WM_COMMAND, IDA_SAVE, 0))
@@ -246,6 +267,7 @@ LRESULT CALLBACK WndProc_Main(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 			}	break;
 			case IDCANCEL: return 0;
 			}
+		}
 	}	break;
 	case WM_DESTROY: {
 		DeleteBrush(hBrush_Background);
@@ -260,9 +282,8 @@ LRESULT CALLBACK WndProc_PaintView(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 	static HWND hWnd_Canvas;
 	switch (uMsg) {
 	case WM_CREATE: {
-		const HINSTANCE hInstance = ((LPCREATESTRUCTW)lParam)->hInstance;
 		WNDCLASSW wndClass = { 0 };
-		wndClass.hInstance = hInstance;
+		wndClass.hInstance = ((LPCREATESTRUCTW)lParam)->hInstance;
 		wndClass.lpszClassName = L"Canvas";
 		wndClass.lpfnWndProc = WndProc_Canvas;
 		wndClass.hCursor = LoadCursor(NULL, IDC_CROSS);
@@ -272,7 +293,7 @@ LRESULT CALLBACK WndProc_PaintView(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 			wndClass.lpszClassName, NULL,
 			WS_CHILD | WS_VISIBLE,
 			CANVAS_LEFT, CANVAS_TOP, CANVAS_WIDTH + CANVAS_MARGIN + CANVAS_PADDING, CANVAS_HEIGHT + CANVAS_MARGIN + CANVAS_PADDING,
-			hWnd, (HMENU)ID_CANVAS, hInstance, NULL);
+			hWnd, (HMENU)ID_CANVAS, wndClass.hInstance, NULL);
 	}	break;
 	case WM_SIZE: {
 		static SIZE pageSize;
@@ -323,7 +344,7 @@ LRESULT CALLBACK WndProc_PaintView(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 		scrollBarInfo.cbSize = sizeof(scrollBarInfo);
 		if (GetScrollBarInfo(hWnd, OBJID_VSCROLL, &scrollBarInfo) &&
 			!(scrollBarInfo.rgstate[0] & STATE_SYSTEM_INVISIBLE)) {
-			SendMessageW(hWnd, WM_VSCROLL, GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? SB_LINEUP : SB_LINEDOWN, 0);
+			PostMessageW(hWnd, WM_VSCROLL, GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? SB_LINEUP : SB_LINEDOWN, 0);
 		}
 		else goto horizontal_wheel;
 	}	break;
@@ -333,7 +354,7 @@ LRESULT CALLBACK WndProc_PaintView(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 		scrollBarInfo.cbSize = sizeof(scrollBarInfo);
 		if (GetScrollBarInfo(hWnd, OBJID_HSCROLL, &scrollBarInfo) &&
 			!(scrollBarInfo.rgstate[0] & STATE_SYSTEM_INVISIBLE))
-			SendMessageW(hWnd, WM_HSCROLL, GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? SB_LINELEFT : SB_LINERIGHT, 0);
+			PostMessageW(hWnd, WM_HSCROLL, GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? SB_LINELEFT : SB_LINERIGHT, 0);
 	}	break;
 	}
 	return DefWindowProcW(hWnd, uMsg, wParam, lParam);
@@ -345,12 +366,12 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 	static LONG lParentWindowStyle;
 	static DWORD dwScanLineSize, dwDIBSectionSize;
 	static PBYTE pDIBSection;
-	static auto_ptr<BYTE> PreviousDIBSection;
-	static HPEN hPen_Old;
+	static auto_ptr<BYTE> previousDIBSection;
+	static HPEN hPen;
 	static HBITMAP hBitmap_Old;
 	static COORD mouseCoord;
-	static RECT canvasRect;
-	static PartialBitmap partialBitmap;
+	static SIZE bitmapSize;
+	static RECT canvasRect, rightShadowRect, bottomShadowRect, gripRect;
 	switch (uMsg) {
 	case WM_CREATE: {
 		SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_FRAMECHANGED);
@@ -372,7 +393,7 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 			break;
 		}
 		FillMemory(pDIBSection, dwDIBSectionSize, 0xff);
-		hBitmap_Old = (HBITMAP)SelectBitmap(hDC_Memory, hBitmap);
+		hBitmap_Old = SelectBitmap(hDC_Memory, hBitmap);
 	}	break;
 	case WM_NCCALCSIZE: {
 		if (wParam) {
@@ -400,10 +421,9 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		lParentWindowStyle = GetWindowLongPtrW(hWnd_Parent, GWL_STYLE);
 		SetWindowLongPtrW(hWnd_Parent, GWL_STYLE, lParentWindowStyle & ~WS_CLIPCHILDREN);
 		canvasRect = { Scale(CANVAS_LEFT, iDPI), Scale(CANVAS_TOP, iDPI) };
-		partialBitmap.Size = canvasSize;
-		partialBitmap.Pixels = decltype(partialBitmap.Pixels)();
-		PreviousDIBSection.reset(new BYTE[dwDIBSectionSize]);
-		CopyMemory(PreviousDIBSection.get(), pDIBSection, dwDIBSectionSize);
+		bitmapSize = canvasSize;
+		previousDIBSection.reset(new BYTE[dwDIBSectionSize]);
+		CopyMemory(previousDIBSection.get(), pDIBSection, dwDIBSectionSize);
 	}	break;
 	case WM_SIZING: {
 		const PRECT pRect = (PRECT)lParam;
@@ -417,58 +437,57 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 	}	break;
 	case WM_SIZE: {
 		canvasSize = { LOWORD(lParam), HIWORD(lParam) };
+		rightShadowRect = { canvasSize.cx, Scale(CANVAS_SHADOW_OFFSET, iDPI), canvasSize.cx + Scale(CANVAS_SHADOW_LENGTH, iDPI), canvasSize.cy };
+		bottomShadowRect = { Scale(CANVAS_SHADOW_OFFSET, iDPI), canvasSize.cy, canvasSize.cx, canvasSize.cy + Scale(CANVAS_SHADOW_LENGTH, iDPI) };
+		gripRect = { canvasSize.cx, canvasSize.cy, canvasSize.cx + iActualMargin, canvasSize.cy + iActualMargin };
 		HRGN hRgn = CreateRectRgn(0, 0, canvasSize.cx, canvasSize.cy),
-			hRgn2 = CreateRectRgn(canvasSize.cx, canvasSize.cy, canvasSize.cx + iActualMargin, canvasSize.cy + iActualMargin);
+			hRgn2 = CreateRectRgnIndirect(&rightShadowRect),
+			hRgn3 = CreateRectRgnIndirect(&bottomShadowRect),
+			hRgn4 = CreateRectRgnIndirect(&gripRect);
 		CombineRgn(hRgn, hRgn, hRgn2, RGN_OR);
+		CombineRgn(hRgn, hRgn, hRgn3, RGN_OR);
+		CombineRgn(hRgn, hRgn, hRgn4, RGN_OR);
 		SetWindowRgn(hWnd, hRgn, TRUE);
-		DeleteRgn(hRgn);
+		DeleteRgn(hRgn4);
+		DeleteRgn(hRgn3);
 		DeleteRgn(hRgn2);
+		DeleteRgn(hRgn);
 		SendMessageW(hWnd_StatusBar, SB_SETTEXT, 1, (LPARAM)(L"Canvas Size: " + to_wstring(canvasSize.cx) + L" \xd7 " + to_wstring(canvasSize.cy) + L" px").c_str());
 	}	break;
 	case WM_EXITSIZEMOVE: {
 		SetWindowLongPtrW(GetParent(hWnd), GWL_STYLE, lParentWindowStyle);
-		if (canvasSize.cx != partialBitmap.Size.cx || canvasSize.cy != partialBitmap.Size.cy) {
+		if (canvasSize.cx != bitmapSize.cx || canvasSize.cy != bitmapSize.cy) {
 			bFileSaved = FALSE;
 			SendMessageW(GetParent(hWnd), WM_SIZE, 0, 0);
-			if (canvasSize.cx < partialBitmap.Size.cx || canvasSize.cy < partialBitmap.Size.cy) {
-				LPCBYTE pPreviousDIBSection = PreviousDIBSection.get();
-				if (canvasSize.cx < partialBitmap.Size.cx) {
-					for (long x = canvasSize.cx; x < partialBitmap.Size.cx; x++)
-						for (long y = 0; y < partialBitmap.Size.cy; y++) {
-							const DWORD i = x * dwPixelSize + y * dwScanLineSize;
-							const RGBQUAD& rgbq = (RGBQUAD&)pPreviousDIBSection[i];
-							if (rgbq.rgbRed != 0xff || rgbq.rgbGreen != 0xff || rgbq.rgbGreen != 0xff)
-								partialBitmap.Pixels.push_back({ i, rgbq });
-						}
-					if (canvasSize.cy < partialBitmap.Size.cy)
-						for (long x = 0; x < canvasSize.cx; x++)
-							for (long y = canvasSize.cy; y < partialBitmap.Size.cy; y++) {
-								const DWORD i = x * dwPixelSize + y * dwScanLineSize;
-								const RGBQUAD& rgbq = (RGBQUAD&)pPreviousDIBSection[i];
-								if (rgbq.rgbRed != 0xff || rgbq.rgbGreen != 0xff || rgbq.rgbGreen != 0xff)
-									partialBitmap.Pixels.push_back({ i, rgbq });
-							}
-					RECT rect = { canvasSize.cx, 0, partialBitmap.Size.cx, partialBitmap.Size.cy };
-					FillRect(hDC_Memory, &rect, SYS_WHITE_BRUSH);
-					rect = { 0, canvasSize.cy, canvasSize.cx, partialBitmap.Size.cy };
-					FillRect(hDC_Memory, &rect, SYS_WHITE_BRUSH);
-				}
-				else if (canvasSize.cy < partialBitmap.Size.cy) {
-					for (long x = 0; x < partialBitmap.Size.cx; x++)
-						for (long y = canvasSize.cy; y < partialBitmap.Size.cy; y++) {
-							const DWORD i = x * dwPixelSize + y * dwScanLineSize;
-							const RGBQUAD& rgbq = (RGBQUAD&)pPreviousDIBSection[i];
-							if (rgbq.rgbRed != 0xff || rgbq.rgbGreen != 0xff || rgbq.rgbGreen != 0xff)
-								partialBitmap.Pixels.push_back({ i, rgbq });
-						}
-					RECT rect = { 0, canvasSize.cy, partialBitmap.Size.cx, partialBitmap.Size.cy };
-					FillRect(hDC_Memory, &rect, SYS_WHITE_BRUSH);
-				}
+			PartialBitmap partialBitmap = { bitmapSize };
+			LPCBYTE pPreviousDIBSection = previousDIBSection.get();
+			if (canvasSize.cx < partialBitmap.Size.cx)
+				for (long x = canvasSize.cx; x < partialBitmap.Size.cx; x++)
+					for (long y = 0; y < canvasSize.cy; y++) {
+						const DWORD i = x * dwPixelSize + y * dwScanLineSize;
+						const RGBQUAD& rgbq = (RGBQUAD&)pPreviousDIBSection[i];
+						if (rgbq.rgbRed != 0xff || rgbq.rgbGreen != 0xff || rgbq.rgbGreen != 0xff)
+							partialBitmap.Pixels.push_back({ i, rgbq });
+					}
+			else if (canvasSize.cx > partialBitmap.Size.cx) {
+				RECT rect = { partialBitmap.Size.cx, 0, canvasSize.cx, partialBitmap.Size.cy };
+				FillRect(hDC_Memory, &rect, SYS_WHITE_BRUSH);
+			}
+			if (canvasSize.cy < partialBitmap.Size.cy)
+				for (long x = 0; x < partialBitmap.Size.cx; x++)
+					for (long y = canvasSize.cy; y < partialBitmap.Size.cy; y++) {
+						const DWORD i = x * dwPixelSize + y * dwScanLineSize;
+						const RGBQUAD& rgbq = (RGBQUAD&)pPreviousDIBSection[i];
+						if (rgbq.rgbRed != 0xff || rgbq.rgbGreen != 0xff || rgbq.rgbGreen != 0xff)
+							partialBitmap.Pixels.push_back({ i, rgbq });
+					}
+			else if (canvasSize.cy > partialBitmap.Size.cy) {
+				RECT rect = { 0, partialBitmap.Size.cy, canvasSize.cx, canvasSize.cy };
+				FillRect(hDC_Memory, &rect, SYS_WHITE_BRUSH);
 			}
 			undoHistory.push(partialBitmap);
 			redoHistory = decltype(redoHistory)();
-			partialBitmap.Pixels = decltype(partialBitmap.Pixels)();
-			PreviousDIBSection.reset(nullptr);
+			previousDIBSection.reset(nullptr);
 			EnableMenuItem(hMenu, IDM_REDO, MF_DISABLED);
 			EnableMenuItem(hMenu, IDM_UNDO, MF_ENABLED);
 		}
@@ -478,24 +497,31 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		SetCapture(hWnd);
 		if (paintingTool != PaintingTools::ColorPicker) {
 			mouseCoord = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-			partialBitmap.Size = canvasSize;
-			partialBitmap.Pixels = decltype(partialBitmap.Pixels)();
-			PreviousDIBSection.reset(new BYTE[dwDIBSectionSize]);
-			CopyMemory(PreviousDIBSection.get(), pDIBSection, dwDIBSectionSize);
+			bitmapSize = canvasSize;
+			previousDIBSection.reset(new BYTE[dwDIBSectionSize]);
+			CopyMemory(previousDIBSection.get(), pDIBSection, dwDIBSectionSize);
 			switch (paintingTool) {
 			case PaintingTools::Pen: case PaintingTools::Eraser: {
-				hPen_Old = SelectPen(hDC_Canvas, CreatePen(PS_SOLID,
+				hPen = CreatePen(PS_SOLID,
 					paintingTool == PaintingTools::Pen ? iPenWidth : iEraserWidth,
-					paintingTool == PaintingTools::Pen ? penColor : 0xffffff));
+					paintingTool == PaintingTools::Pen ? penColor : 0xffffff);
+				SelectPen(hDC_Canvas, hPen);
+				SelectPen(hDC_Memory, hPen);
 				SetPixelV(hDC_Canvas, mouseCoord.X, mouseCoord.Y, paintingTool == PaintingTools::Pen ? penColor : 0xffffff);
+				SetPixelV(hDC_Memory, mouseCoord.X, mouseCoord.Y, paintingTool == PaintingTools::Pen ? penColor : 0xffffff);
 				MoveToEx(hDC_Canvas, mouseCoord.X, mouseCoord.Y, NULL);
+				MoveToEx(hDC_Memory, mouseCoord.X, mouseCoord.Y, NULL);
 				LineTo(hDC_Canvas, mouseCoord.X, mouseCoord.Y);
+				LineTo(hDC_Memory, mouseCoord.X, mouseCoord.Y);
 			}	break;
 			case PaintingTools::Fill: {
-				HBRUSH hBrush_Old = SelectBrush(hDC_Canvas, CreateSolidBrush(penColor));
 				COLORREF color = GetPixel(hDC_Canvas, mouseCoord.X, mouseCoord.Y);
+				HBRUSH hBrush = CreateSolidBrush(penColor);
+				SelectBrush(hDC_Canvas, hBrush);
+				SelectBrush(hDC_Memory, hBrush);
 				ExtFloodFill(hDC_Canvas, mouseCoord.X, mouseCoord.Y, color, FLOODFILLSURFACE);
-				DeleteBrush(SelectBrush(hDC_Canvas, hBrush_Old));
+				ExtFloodFill(hDC_Memory, mouseCoord.X, mouseCoord.Y, color, FLOODFILLSURFACE);
+				DeleteBrush(hBrush);
 			}	break;
 			}
 		}
@@ -508,7 +534,10 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		if (bLeftButtonDown) {
 			mouseCoord = coord;
 			switch (paintingTool) {
-			case PaintingTools::Pen: case PaintingTools::Eraser: LineTo(hDC_Canvas, mouseCoord.X, mouseCoord.Y); break;
+			case PaintingTools::Pen: case PaintingTools::Eraser: {
+				LineTo(hDC_Canvas, mouseCoord.X, mouseCoord.Y);
+				LineTo(hDC_Memory, mouseCoord.X, mouseCoord.Y);
+			}	break;
 			}
 		}
 	}	break;
@@ -518,11 +547,11 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		if (bLeftButtonDown) {
 			bLeftButtonDown = FALSE;
 			switch (paintingTool) {
-			case PaintingTools::Pen: case PaintingTools::Eraser: DeletePen(SelectPen(hDC_Canvas, hPen_Old)); // no "break;"
+			case PaintingTools::Pen: case PaintingTools::Eraser: DeletePen(hPen); // no "break;"
 			case PaintingTools::Fill: {
 				bFileSaved = FALSE;
-				BitBlt(hDC_Memory, 0, 0, canvasSize.cx, canvasSize.cy, hDC_Canvas, 0, 0, SRCCOPY);
-				LPCBYTE pPreviousDIBSection = PreviousDIBSection.get();
+				PartialBitmap partialBitmap = { bitmapSize };
+				LPCBYTE pPreviousDIBSection = previousDIBSection.get();
 				for (long x = 0; x < partialBitmap.Size.cx; x++)
 					for (long y = 0; y < partialBitmap.Size.cy; y++) {
 						const DWORD i = x * dwPixelSize + y * dwScanLineSize;
@@ -532,8 +561,7 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 					}
 				undoHistory.push(partialBitmap);
 				redoHistory = decltype(redoHistory)();
-				partialBitmap.Pixels = decltype(partialBitmap.Pixels)();
-				PreviousDIBSection.reset(nullptr);
+				previousDIBSection.reset(nullptr);
 				EnableMenuItem(hMenu, IDM_REDO, MF_DISABLED);
 				EnableMenuItem(hMenu, IDM_UNDO, MF_ENABLED);
 			}	break;
@@ -554,9 +582,16 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 			if (!bLeftButtonDown && !undoHistory.empty()) {
 				bFileSaved = FALSE;
 				const auto& partialBitmap = undoHistory.top();
-				const auto& pixels = partialBitmap.Pixels;
+				if (canvasSize.cx < partialBitmap.Size.cx) {
+					RECT rect = { canvasSize.cx, 0, partialBitmap.Size.cx, canvasSize.cy };
+					FillRect(hDC_Memory, &rect, SYS_WHITE_BRUSH);
+				}
+				if (canvasSize.cy < partialBitmap.Size.cy) {
+					RECT rect = { 0, canvasSize.cy, partialBitmap.Size.cx, partialBitmap.Size.cy };
+					FillRect(hDC_Memory, &rect, SYS_WHITE_BRUSH);
+				}
 				vector<PIXEL> temp;
-				for (const auto& pixel : pixels) {
+				for (const auto& pixel : partialBitmap.Pixels) {
 					const DWORD i = pixel.dwDIBSectionIndex;
 					RGBQUAD& rgbq = (RGBQUAD&)pDIBSection[i];
 					temp.push_back({ i, { rgbq.rgbBlue, rgbq.rgbGreen, rgbq.rgbRed } });
@@ -565,7 +600,10 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 					rgbq.rgbBlue = pixel.Rgbq.rgbBlue;
 				}
 				redoHistory.push({ canvasSize, temp });
-				SetWindowPos(hWnd, NULL, 0, 0, partialBitmap.Size.cx + iActualMargin, partialBitmap.Size.cy + iActualMargin, SWP_NOMOVE | SWP_NOZORDER);
+				if (canvasSize.cx != partialBitmap.Size.cx || canvasSize.cy != partialBitmap.Size.cy) {
+					SetWindowPos(hWnd, NULL, 0, 0, partialBitmap.Size.cx + iActualMargin, partialBitmap.Size.cy + iActualMargin, SWP_NOMOVE | SWP_NOZORDER);
+					SendMessageW(GetParent(hWnd), WM_SIZE, 0, 0);
+				}
 				undoHistory.pop();
 				EnableMenuItem(hMenu, IDM_REDO, MF_ENABLED);
 				if (undoHistory.empty())
@@ -577,9 +615,16 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 			if (!bLeftButtonDown && !redoHistory.empty()) {
 				bFileSaved = FALSE;
 				const auto& partialBitmap = redoHistory.top();
-				const auto& pixels = partialBitmap.Pixels;
+				if (canvasSize.cx < partialBitmap.Size.cx) {
+					RECT rect = { canvasSize.cx, 0, partialBitmap.Size.cx, canvasSize.cy };
+					FillRect(hDC_Memory, &rect, SYS_WHITE_BRUSH);
+				}
+				if (canvasSize.cy < partialBitmap.Size.cy) {
+					RECT rect = { 0, canvasSize.cy, partialBitmap.Size.cx, partialBitmap.Size.cy };
+					FillRect(hDC_Memory, &rect, SYS_WHITE_BRUSH);
+				}
 				vector<PIXEL> temp;
-				for (const auto& pixel : pixels) {
+				for (const auto& pixel : partialBitmap.Pixels) {
 					const DWORD i = pixel.dwDIBSectionIndex;
 					RGBQUAD& rgbq = (RGBQUAD&)pDIBSection[i];
 					temp.push_back({ i, { rgbq.rgbBlue, rgbq.rgbGreen, rgbq.rgbRed } });
@@ -588,7 +633,10 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 					rgbq.rgbBlue = pixel.Rgbq.rgbBlue;
 				}
 				undoHistory.push({ canvasSize, temp });
-				SetWindowPos(hWnd, NULL, 0, 0, partialBitmap.Size.cx + iActualMargin, partialBitmap.Size.cy + iActualMargin, SWP_NOMOVE | SWP_NOZORDER);
+				if (canvasSize.cx != partialBitmap.Size.cx || canvasSize.cy != partialBitmap.Size.cy) {
+					SetWindowPos(hWnd, NULL, 0, 0, partialBitmap.Size.cx + iActualMargin, partialBitmap.Size.cy + iActualMargin, SWP_NOMOVE | SWP_NOZORDER);
+					SendMessageW(GetParent(hWnd), WM_SIZE, 0, 0);
+				}
 				redoHistory.pop();
 				EnableMenuItem(hMenu, IDM_UNDO, MF_ENABLED);
 				if (redoHistory.empty())
@@ -600,11 +648,13 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 			if (bLeftButtonDown) {
 				bLeftButtonDown = FALSE;
 				ReleaseCapture();
-				partialBitmap.Pixels = decltype(partialBitmap.Pixels)();
-				PreviousDIBSection.reset(nullptr);
-				BitBlt(hDC_Canvas, 0, 0, canvasSize.cx, canvasSize.cy, hDC_Memory, 0, 0, SRCCOPY);
 				switch (paintingTool) {
-				case PaintingTools::Pen: case PaintingTools::Eraser: DeletePen(SelectPen(hDC_Canvas, hPen_Old)); break;
+				case PaintingTools::Pen: case PaintingTools::Eraser: DeletePen(hPen); // no "break;"
+				case PaintingTools::Fill: {
+					CopyMemory(pDIBSection, previousDIBSection.get(), dwDIBSectionSize);
+					previousDIBSection.reset(nullptr);
+					BitBlt(hDC_Canvas, 0, 0, canvasSize.cx, canvasSize.cy, hDC_Memory, 0, 0, SRCCOPY);
+				}	break;
 				}
 			}
 		}	break;
@@ -612,10 +662,18 @@ LRESULT CALLBACK WndProc_Canvas(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 	}	break;
 	case WM_NCPAINT: {
 		HDC hDC = GetWindowDC(hWnd);
-		RECT rect = { canvasSize.cx, canvasSize.cy, canvasSize.cx + iActualMargin, canvasSize.cy + iActualMargin };
-		FillRect(hDC, &rect, (HBRUSH)COLOR_WINDOW);
+		TRIVERTEX triVertices[] = {
+			{ rightShadowRect.left, rightShadowRect.top, 0xaa00, 0xb400, 0xbe00 },
+			{ rightShadowRect.right, rightShadowRect.bottom, 0xd200, 0xdc00, 0xe600 } },
+			triVertices2[] = {
+			{ bottomShadowRect.left, bottomShadowRect.top, triVertices[0].Red, triVertices[0].Green, triVertices[0].Blue },
+			{ bottomShadowRect.right, bottomShadowRect.bottom, triVertices[1].Red, triVertices[1].Green, triVertices[1].Blue } };
+		GRADIENT_RECT gradientRect = { 0, 1 };
+		GdiGradientFill(hDC, triVertices, _countof(triVertices), &gradientRect, 1, GRADIENT_FILL_RECT_H);
+		GdiGradientFill(hDC, triVertices2, _countof(triVertices2), &gradientRect, 1, GRADIENT_FILL_RECT_V);
+		FillRect(hDC, &gripRect, (HBRUSH)COLOR_WINDOW);
 		HBRUSH hBrush = CreateSolidBrush(RGB(14, 151, 249));
-		FrameRect(hDC, &rect, hBrush);
+		FrameRect(hDC, &gripRect, hBrush);
 		DeleteBrush(hBrush);
 		ReleaseDC(hWnd, hDC);
 	}	break;
