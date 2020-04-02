@@ -1,6 +1,6 @@
 /*
 Project Name: Simple Paint
-Last Update: 2020/02/14
+Last Update: 2020/04/02
 
 This project is hosted on https://github.com/Hydr10n/Simple-Paint
 Copyright (C) Programmer-Yang_Xun@outlook.com. All Rights Reserved.
@@ -162,7 +162,7 @@ LRESULT CALLBACK WndProc_Main(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 					if (bFileSaved)
 						goto discard;
 				}	break;
-				case IDNO: goto discard;
+				case IDNO: bFileSaved = TRUE; goto discard;
 				}
 			else {
 			discard:;
